@@ -13,11 +13,8 @@ import {
   ShieldCheck,
   UploadCloud,
 } from 'lucide-react';
+import { BrowserModel, loadBrowserModel, predictInBrowser } from './browserInference';
 import './styles.css';
-
-const configuredApiBase = (import.meta.env.VITE_API_BASE ?? '').trim();
-const backendConfigured = Boolean(configuredApiBase) || import.meta.env.DEV;
-const API_BASE = configuredApiBase || '/api';
 
 type HealthResponse = {
   status: string;
@@ -91,32 +88,30 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState('');
+  const [browserModel, setBrowserModel] = useState<BrowserModel | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchHealth = useCallback(async () => {
-    if (!backendConfigured) {
-      setHealth({
-        status: 'backend_unconfigured',
-        modelAvailable: false,
-        xaiDataAvailable: false,
-        error: 'Backend URL is not configured for this deployment.',
-      });
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE}/health`);
-      if (!response.ok) {
-        throw new Error('API health check failed');
-      }
-      const data = (await response.json()) as HealthResponse;
-      setHealth(data);
-    } catch {
+      const model = await loadBrowserModel();
+      setBrowserModel(model);
       setHealth({
-        status: 'api_offline',
+        status: 'ready',
+        modelAvailable: true,
+        xaiDataAvailable: false,
+        model: {
+          name: model.modelName,
+          suite: model.suite,
+          featureSet: model.featureSet,
+          version: 'browser-rf',
+        },
+      });
+    } catch (exc) {
+      setHealth({
+        status: 'model_missing',
         modelAvailable: false,
         xaiDataAvailable: false,
-        error: 'API is not reachable',
+        error: exc instanceof Error ? exc.message : 'Browser model is not reachable',
       });
     }
   }, []);
@@ -150,8 +145,8 @@ function App() {
       setError('Choose a WAV audio file before running prediction.');
       return;
     }
-    if (!backendConfigured) {
-      setError('This GitHub Pages deployment needs a hosted backend URL in VITE_API_BASE before predictions can run.');
+    if (!browserModel) {
+      setError('Browser model is still loading. Refresh status and try again.');
       return;
     }
 
@@ -159,19 +154,9 @@ function App() {
     setError('');
     setResult(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const response = await fetch(`${API_BASE}/predict`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Prediction failed');
-      }
-      setResult(data as PredictionResponse);
+      const data = await predictInBrowser(file, browserModel);
+      setResult({ ...data, filename: file.name });
       fetchHealth();
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : 'Prediction failed');
@@ -245,22 +230,15 @@ function App() {
               </div>
 
               <div className="action-row">
-                <button className="primary-button" onClick={submit} disabled={loading || !file || !backendConfigured}>
+                <button className="primary-button" onClick={submit} disabled={loading || !file || !browserModel}>
                   {loading ? <Loader2 className="spin" size={18} /> : <Activity size={18} />}
                   <span>{loading ? 'Analyzing audio' : 'Predict emotion'}</span>
                 </button>
-                <button className="ghost-button" onClick={fetchHealth} disabled={!backendConfigured}>
+                <button className="ghost-button" onClick={fetchHealth}>
                   <Gauge size={18} />
                   <span>Refresh status</span>
                 </button>
               </div>
-
-              {!backendConfigured && (
-                <div className="notice-box">
-                  <AlertCircle size={18} />
-                  <span>GitHub Pages hosts the frontend only. Add a hosted FastAPI URL as VITE_API_BASE to enable predictions.</span>
-                </div>
-              )}
 
               {error && (
                 <div className="error-box">

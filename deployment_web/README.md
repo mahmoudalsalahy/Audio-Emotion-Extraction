@@ -61,10 +61,37 @@ https://your-github-username.github.io
 
 If you use multiple frontend origins, separate them with commas.
 
-## Enable Online Predictions
+## Browser-Only GitHub Pages Predictions
 
-The message `GitHub Pages hosts the frontend only` appears when the frontend is
-published but no hosted backend URL has been configured.
+The GitHub Pages frontend can run predictions without a backend using the
+exported browser model at:
+
+```text
+deployment_web/frontend/public/model/browser-model.json
+```
+
+The browser version uses the RandomForest component from the saved stacking
+model and a JavaScript implementation of the audio feature extraction pipeline.
+It avoids FastAPI hosting entirely, so no `VITE_API_BASE` variable is required
+for GitHub Pages.
+
+To regenerate the browser model after retraining:
+
+```powershell
+python scripts/export_browser_model.py
+```
+
+Then rebuild the frontend:
+
+```powershell
+cd deployment_web/frontend
+cmd /c npm run build
+```
+
+## Optional Hosted Backend
+
+The FastAPI backend is still available if you want server-side predictions
+instead of the browser model.
 
 If Render asks for payment, use Hugging Face Spaces instead. The backend folder
 includes Docker deployment files that work with Hugging Face Spaces:
