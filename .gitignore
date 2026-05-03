@@ -22,4 +22,6 @@ venv/
 # Generated training artifacts and local datasets
 models/*.pkl
 data/*.pkl
+deployment_web/backend/models/*.pkl
+deployment_web/backend/data/*.pkl
 ser_cremad_outputs/cache/

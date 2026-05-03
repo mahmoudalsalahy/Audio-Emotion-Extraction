@@ -66,8 +66,40 @@ If you use multiple frontend origins, separate them with commas.
 The message `GitHub Pages hosts the frontend only` appears when the frontend is
 published but no hosted backend URL has been configured.
 
-Deploy the FastAPI backend first. This repository includes a `render.yaml`
-blueprint for Render:
+If Render asks for payment, use Hugging Face Spaces instead. The backend folder
+includes Docker deployment files that work with Hugging Face Spaces:
+
+- `deployment_web/backend/Dockerfile`
+- `deployment_web/backend/README.md`
+- `deployment_web/backend/models/.gitkeep`
+- `deployment_web/backend/data/.gitkeep`
+
+Create a new Hugging Face Space:
+
+1. Choose `Docker` as the Space SDK.
+2. Upload the contents of `deployment_web/backend` to the Space repository.
+3. Upload `model-v1.pkl` to `models/model-v1.pkl`.
+4. Optionally upload `xai-data.pkl` to `data/xai-data.pkl`.
+5. Wait for the Space to build and start.
+
+Your backend URL will look like:
+
+```text
+https://your-username-audio-emotion-api.hf.space
+```
+
+Then add that URL to GitHub Actions variables:
+
+1. Open the GitHub repository.
+2. Go to `Settings > Secrets and variables > Actions > Variables`.
+3. Add `VITE_API_BASE` with the Hugging Face Space URL.
+4. Re-run the `Deploy frontend to GitHub Pages` workflow.
+
+The backend needs `models/model-v1.pkl` to return predictions. Without the
+model, `/health` will return `model_missing`.
+
+Render is still supported if you decide to use it later. This repository also
+includes a `render.yaml` blueprint for Render:
 
 1. Push this repository to GitHub.
 2. Open Render and create a new `Blueprint` from the repository.
@@ -78,13 +110,5 @@ blueprint for Render:
 https://audio-emotion-api.onrender.com
 ```
 
-Then add that URL to GitHub Actions variables:
-
-1. Open the GitHub repository.
-2. Go to `Settings > Secrets and variables > Actions > Variables`.
-3. Add `VITE_API_BASE` with the Render URL.
-4. Re-run the `Deploy frontend to GitHub Pages` workflow.
-
-The backend also needs `models/model-v1.pkl` to return predictions. For a hosted
-deployment, provide the model file on the backend host or set `MODEL_PATH` to
-the hosted file path. Without the model, `/health` will return `model_missing`.
+For Render, provide the model file on the backend host or set `MODEL_PATH` to
+the hosted file path.
