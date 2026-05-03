@@ -1,2 +1,25 @@
 node_modules/
 AudioWAV/
+
+# Build output
+dist/
+build/
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local IDE files
+.vs/
+.vscode/
+
+# Local environment files
+.env
+.env.*
+
+# Generated training artifacts and local datasets
+models/*.pkl
+data/*.pkl
+ser_cremad_outputs/cache/

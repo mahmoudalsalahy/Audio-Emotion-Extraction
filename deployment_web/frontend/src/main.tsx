@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 type HealthResponse = {
   status: string;
