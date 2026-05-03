@@ -258,7 +258,8 @@ h2 {
   transform: translateY(-1px);
 }
 
-.primary-button:disabled {
+.primary-button:disabled,
+.ghost-button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
@@ -269,15 +270,25 @@ h2 {
   background: #ffffff;
 }
 
+.notice-box,
 .error-box {
   margin-top: 14px;
-  border: 1px solid #fecaca;
-  background: #fff7f7;
-  color: #991b1b;
   padding: 12px;
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.notice-box {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.error-box {
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
 }
 
 .model-card {

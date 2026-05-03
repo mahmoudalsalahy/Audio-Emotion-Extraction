@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const configuredApiBase = (import.meta.env.VITE_API_BASE ?? '').trim();
+const backendConfigured = Boolean(configuredApiBase) || import.meta.env.DEV;
+const API_BASE = configuredApiBase || '/api';
 
 type HealthResponse = {
   status: string;
@@ -92,8 +94,21 @@ function App() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchHealth = useCallback(async () => {
+    if (!backendConfigured) {
+      setHealth({
+        status: 'backend_unconfigured',
+        modelAvailable: false,
+        xaiDataAvailable: false,
+        error: 'Backend URL is not configured for this deployment.',
+      });
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/health`);
+      if (!response.ok) {
+        throw new Error('API health check failed');
+      }
       const data = (await response.json()) as HealthResponse;
       setHealth(data);
     } catch {
@@ -113,6 +128,7 @@ function App() {
   const status = useMemo(() => {
     if (!health) return { label: 'Checking API', className: 'neutral' };
     if (health.status === 'ready') return { label: 'Model ready', className: 'ready' };
+    if (health.status === 'backend_unconfigured') return { label: 'Backend required', className: 'warning' };
     if (health.status === 'api_offline') return { label: 'API offline', className: 'danger' };
     return { label: 'Model missing', className: 'warning' };
   }, [health]);
@@ -132,6 +148,10 @@ function App() {
   const submit = async () => {
     if (!file) {
       setError('Choose a WAV audio file before running prediction.');
+      return;
+    }
+    if (!backendConfigured) {
+      setError('This GitHub Pages deployment needs a hosted backend URL in VITE_API_BASE before predictions can run.');
       return;
     }
 
@@ -225,15 +245,22 @@ function App() {
               </div>
 
               <div className="action-row">
-                <button className="primary-button" onClick={submit} disabled={loading || !file}>
+                <button className="primary-button" onClick={submit} disabled={loading || !file || !backendConfigured}>
                   {loading ? <Loader2 className="spin" size={18} /> : <Activity size={18} />}
                   <span>{loading ? 'Analyzing audio' : 'Predict emotion'}</span>
                 </button>
-                <button className="ghost-button" onClick={fetchHealth}>
+                <button className="ghost-button" onClick={fetchHealth} disabled={!backendConfigured}>
                   <Gauge size={18} />
                   <span>Refresh status</span>
                 </button>
               </div>
+
+              {!backendConfigured && (
+                <div className="notice-box">
+                  <AlertCircle size={18} />
+                  <span>GitHub Pages hosts the frontend only. Add a hosted FastAPI URL as VITE_API_BASE to enable predictions.</span>
+                </div>
+              )}
 
               {error && (
                 <div className="error-box">
