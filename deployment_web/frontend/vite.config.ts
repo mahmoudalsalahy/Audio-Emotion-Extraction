@@ -1,10 +1,11 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1];
+const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'Audio-Emotion-Extraction';
+const basePath = process.env.NODE_ENV === 'production' ? `/${repositoryName}/` : '/';
 
 export default defineConfig({
-  base: repositoryName ? `/${repositoryName}/` : '/',
+  base: basePath,
   plugins: [react()],
   server: {
     proxy: {
