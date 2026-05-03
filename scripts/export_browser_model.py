@@ -37,6 +37,7 @@ def main() -> None:
 
     scaler = package["scaler"].named_steps["standard_scaler"]
     random_forest = package["model"].named_estimators_["random_forest"]
+    knn = package["model"].named_estimators_["knn"]
 
     payload = {
         "version": 1,
@@ -53,6 +54,12 @@ def main() -> None:
             "nClasses": int(random_forest.n_classes_),
             "nTrees": len(random_forest.estimators_),
             "trees": [export_tree(tree) for tree in random_forest.estimators_],
+        },
+        "knn": {
+            "nClasses": len(package["class_names"]),
+            "nNeighbors": int(knn.n_neighbors),
+            "x": rounded(knn._fit_X, 6),
+            "y": rounded(knn._y),
         },
         "testMetrics": package.get("test_metrics", {}),
     }

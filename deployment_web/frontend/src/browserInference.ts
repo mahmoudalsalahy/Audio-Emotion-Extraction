@@ -13,6 +13,12 @@ export type BrowserModel = {
     nTrees: number;
     trees: TreeModel[];
   };
+  knn: {
+    nClasses: number;
+    nNeighbors: number;
+    x: number[][];
+    y: number[];
+  };
   testMetrics: Record<string, number>;
 };
 
@@ -66,7 +72,9 @@ export async function predictInBrowser(file: File, model: BrowserModel): Promise
   const samples = await decodeAudio(file);
   const features = extractFeatures(samples);
   const scaled = scaleAndNormalize(features, model);
-  const scores = predictRandomForest(model.randomForest, scaled);
+  const forestScores = predictRandomForest(model.randomForest, scaled);
+  const knnScores = predictKnn(model.knn, scaled);
+  const scores = blendScores(forestScores, knnScores);
   const order = scores.map((score, index) => ({ score, index })).sort((a, b) => b.score - a.score);
   const top = order[0];
   const second = order[1];
@@ -92,7 +100,7 @@ export async function predictInBrowser(file: File, model: BrowserModel): Promise
     },
     explanation: {
       summary:
-        'Prediction runs fully in the browser using the exported RandomForest component of the saved training model and JavaScript audio feature extraction.',
+        'Prediction runs fully in the browser using exported RandomForest and KNN components from the saved training model plus JavaScript audio feature extraction.',
       topFeatureNames: model.featureNames.slice(0, 8),
       xaiDataAvailable: false,
     },
@@ -144,6 +152,7 @@ function extractFeatures(samples: Float32Array) {
   const rms: number[] = [];
   const f0: number[] = [];
   const melDbValues: number[] = [];
+  const melEnergyFrames: number[][] = [];
 
   for (const frame of frames) {
     const spectrum = magnitudeSpectrum(frame);
@@ -155,10 +164,7 @@ function extractFeatures(samples: Float32Array) {
       for (let i = 0; i < filter.length; i += 1) energy += filter[i] * power[i];
       return Math.max(energy, 1e-12);
     });
-    const maxMel = Math.max(...melEnergies);
-    const melDb = melEnergies.map((value) => 10 * Math.log10(value / maxMel));
-    melDbValues.push(...melDb);
-    mfccFrames.push(dctMatrix.map((row) => dot(row, melDb)));
+    melEnergyFrames.push(melEnergies);
 
     const chroma = Array.from({ length: 12 }, () => 0);
     for (let i = 1; i < power.length; i += 1) {
@@ -176,6 +182,13 @@ function extractFeatures(samples: Float32Array) {
     zcr.push(zeroCrossingRate(frame));
     rms.push(Math.sqrt(sum(Array.from(frame, (value) => value * value)) / frame.length));
     f0.push(estimatePitch(frame));
+  }
+
+  const maxMelEnergy = Math.max(...melEnergyFrames.flat(), 1e-12);
+  for (const melEnergies of melEnergyFrames) {
+    const logMelForMfcc = melEnergies.map((value) => powerToDb(value));
+    mfccFrames.push(dctMatrix.map((row) => dot(row, logMelForMfcc)));
+    melDbValues.push(...melEnergies.map((value) => Math.max(powerToDb(value / maxMelEnergy), -80)));
   }
 
   const mfccDelta = delta(mfccFrames);
@@ -271,25 +284,43 @@ function fft(real: number[], imag: number[]) {
 }
 
 function createMelFilters() {
-  const hzToMel = (hz: number) => 2595 * Math.log10(1 + hz / 700);
-  const melToHz = (mel: number) => 700 * (10 ** (mel / 2595) - 1);
+  const hzToMel = (hz: number) => {
+    const fMin = 0;
+    const fSp = 200 / 3;
+    const minLogHz = 1000;
+    const minLogMel = (minLogHz - fMin) / fSp;
+    const logStep = Math.log(6.4) / 27;
+    return hz >= minLogHz ? minLogMel + Math.log(hz / minLogHz) / logStep : (hz - fMin) / fSp;
+  };
+  const melToHz = (mel: number) => {
+    const fMin = 0;
+    const fSp = 200 / 3;
+    const minLogHz = 1000;
+    const minLogMel = (minLogHz - fMin) / fSp;
+    const logStep = Math.log(6.4) / 27;
+    return mel >= minLogMel ? minLogHz * Math.exp(logStep * (mel - minLogMel)) : fMin + fSp * mel;
+  };
   const minMel = hzToMel(0);
   const maxMel = hzToMel(SAMPLE_RATE / 2);
   const melPoints = Array.from({ length: N_MELS + 2 }, (_, i) => minMel + (i / (N_MELS + 1)) * (maxMel - minMel));
-  const bins = melPoints.map((mel) => Math.floor(((N_FFT + 1) * melToHz(mel)) / SAMPLE_RATE));
+  const hzPoints = melPoints.map(melToHz);
+  const bins = hzPoints.map((hz) => Math.floor(((N_FFT + 1) * hz) / SAMPLE_RATE));
 
   return Array.from({ length: N_MELS }, (_, m) => {
     const filter = Array.from({ length: N_FFT / 2 + 1 }, () => 0);
     for (let k = bins[m]; k < bins[m + 1]; k += 1) filter[k] = (k - bins[m]) / Math.max(bins[m + 1] - bins[m], 1);
     for (let k = bins[m + 1]; k < bins[m + 2]; k += 1) filter[k] = (bins[m + 2] - k) / Math.max(bins[m + 2] - bins[m + 1], 1);
+    const enorm = 2 / Math.max(hzPoints[m + 2] - hzPoints[m], 1e-12);
+    for (let k = 0; k < filter.length; k += 1) filter[k] *= enorm;
     return filter;
   });
 }
 
 function createDctMatrix() {
-  return Array.from({ length: N_MFCC }, (_, i) =>
-    Array.from({ length: N_MELS }, (_, j) => Math.cos((Math.PI * i * (j + 0.5)) / N_MELS)),
-  );
+  return Array.from({ length: N_MFCC }, (_, i) => {
+    const scale = i === 0 ? Math.sqrt(1 / (4 * N_MELS)) * 2 : Math.sqrt(1 / (2 * N_MELS)) * 2;
+    return Array.from({ length: N_MELS }, (_, j) => scale * Math.cos((Math.PI * i * (j + 0.5)) / N_MELS));
+  });
 }
 
 function delta(frames: number[][]) {
@@ -339,6 +370,33 @@ function predictRandomForest(forest: BrowserModel['randomForest'], features: num
   return scores.map((score) => score / total);
 }
 
+function predictKnn(knn: BrowserModel['knn'], features: number[]) {
+  const nearest: Array<{ distance: number; label: number }> = [];
+  for (let rowIndex = 0; rowIndex < knn.x.length; rowIndex += 1) {
+    const candidate = knn.x[rowIndex];
+    let distance = 0;
+    for (let featureIndex = 0; featureIndex < candidate.length; featureIndex += 1) {
+      const diff = features[featureIndex] - candidate[featureIndex];
+      distance += diff * diff;
+    }
+    nearest.push({ distance: Math.sqrt(distance), label: knn.y[rowIndex] });
+  }
+  nearest.sort((a, b) => a.distance - b.distance);
+
+  const scores = Array.from({ length: knn.nClasses }, () => 0);
+  for (const neighbor of nearest.slice(0, knn.nNeighbors)) {
+    scores[neighbor.label] += 1 / Math.max(neighbor.distance, 1e-9);
+  }
+  const total = sum(scores) || 1e-12;
+  return scores.map((score) => score / total);
+}
+
+function blendScores(forestScores: number[], knnScores: number[]) {
+  const scores = forestScores.map((score, index) => score * 0.65 + knnScores[index] * 0.35);
+  const total = sum(scores) || 1e-12;
+  return scores.map((score) => score / total);
+}
+
 function scaleAndNormalize(features: number[], model: BrowserModel) {
   const scaled = features.map((value, index) => (value - model.standardScaler.mean[index]) / model.standardScaler.scale[index]);
   const norm = Math.sqrt(sum(scaled.map((value) => value * value))) || 1;
@@ -377,6 +435,10 @@ function percentile(values: number[], p: number) {
   const upper = Math.ceil(index);
   const weight = index - lower;
   return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
+
+function powerToDb(value: number) {
+  return 10 * Math.log10(Math.max(value, 1e-10));
 }
 
 function mean(values: number[]) {

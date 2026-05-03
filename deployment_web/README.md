@@ -70,8 +70,8 @@ exported browser model at:
 deployment_web/frontend/public/model/browser-model.json
 ```
 
-The browser version uses the RandomForest component from the saved stacking
-model and a JavaScript implementation of the audio feature extraction pipeline.
+The browser version uses the RandomForest and KNN components from the saved
+stacking model and a JavaScript implementation of the audio feature extraction pipeline.
 It avoids FastAPI hosting entirely, so no `VITE_API_BASE` variable is required
 for GitHub Pages.
 
