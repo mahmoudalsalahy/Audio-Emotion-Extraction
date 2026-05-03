@@ -13,8 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODEL_PATH = PROJECT_ROOT / "models" / "model-v1.pkl"
-XAI_DATA_PATH = PROJECT_ROOT / "data" / "xai-data.pkl"
+MODEL_PATH = Path(os.getenv("MODEL_PATH", PROJECT_ROOT / "models" / "model-v1.pkl"))
+XAI_DATA_PATH = Path(os.getenv("XAI_DATA_PATH", PROJECT_ROOT / "data" / "xai-data.pkl"))
 
 SAMPLE_RATE = 16000
 MIN_DURATION = 0.5

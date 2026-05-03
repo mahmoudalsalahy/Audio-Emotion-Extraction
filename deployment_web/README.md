@@ -60,3 +60,31 @@ https://your-github-username.github.io
 ```
 
 If you use multiple frontend origins, separate them with commas.
+
+## Enable Online Predictions
+
+The message `GitHub Pages hosts the frontend only` appears when the frontend is
+published but no hosted backend URL has been configured.
+
+Deploy the FastAPI backend first. This repository includes a `render.yaml`
+blueprint for Render:
+
+1. Push this repository to GitHub.
+2. Open Render and create a new `Blueprint` from the repository.
+3. Render will detect `render.yaml` and create `audio-emotion-api`.
+4. After deployment, copy the backend URL, for example:
+
+```text
+https://audio-emotion-api.onrender.com
+```
+
+Then add that URL to GitHub Actions variables:
+
+1. Open the GitHub repository.
+2. Go to `Settings > Secrets and variables > Actions > Variables`.
+3. Add `VITE_API_BASE` with the Render URL.
+4. Re-run the `Deploy frontend to GitHub Pages` workflow.
+
+The backend also needs `models/model-v1.pkl` to return predictions. For a hosted
+deployment, provide the model file on the backend host or set `MODEL_PATH` to
+the hosted file path. Without the model, `/health` will return `model_missing`.
